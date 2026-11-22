@@ -1,0 +1,189 @@
+
+@page "/register"
+
+@using Microsoft.EntityFrameworkCore
+@using Microsoft.AspNetCore.Identity
+@using System.ComponentModel.DataAnnotations
+@using win_Project_dating_site.Models
+@using win_Project_dating_site.Data
+
+@inject ApplicationDbContext Db
+@inject NavigationManager Navigation
+
+<PageTitle>Регистрация</PageTitle>
+
+<div class="register-container">
+
+    <h1>Создание анкеты</h1>
+    <p>Заполни информацию о себе</p>
+
+    <EditForm Model="@user"
+              OnSubmit="RegisterUser"
+              FormName="RegisterForm">
+
+        <DataAnnotationsValidator />
+        <ValidationSummary />
+
+        <label>Имя</label>
+        <InputText @bind-Value="user.Name"
+                   class="form-control" />
+
+        <label>Email</label>
+        <InputText @bind-Value="user.Email"
+                   class="form-control" />
+
+        <label>Пароль</label>
+        <InputText @bind-Value="password"
+                   type="password"
+                   class="form-control" />
+
+        <label>Возраст</label>
+        <InputNumber @bind-Value="user.Age"
+                     class="form-control" />
+
+        <label>Пол</label>
+        <InputSelect @bind-Value="user.Gender"
+                     class="form-control">
+
+            <option value="">Выбери пол</option>
+            <option value="Мужской">Мужской</option>
+            <option value="Женский">Женский</option>
+
+        </InputSelect>
+
+        <label>Город</label>
+        <InputText @bind-Value="user.City"
+                   class="form-control" />
+
+        <label>О себе</label>
+        <InputTextArea @bind-Value="user.About"
+                       class="form-control" />
+
+        <button type="submit" class="register-button">
+            Зарегистрироваться
+        </button>
+
+    </EditForm>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <p class="text-danger">@errorMessage</p>
+    }
+
+</div>
+
+@code {
+
+    [SupplyParameterFromForm]
+    private User user { get; set; } = new();
+
+    [SupplyParameterFromForm]
+    private string password { get; set; } = "";
+
+    private string errorMessage = "";
+
+    private async Task RegisterUser()
+    {
+        errorMessage = "";
+
+        // Убираем лишние пробелы
+        user.Name = user.Name?.Trim() ?? "";
+        user.Email = user.Email?.Trim() ?? "";
+        user.City = user.City?.Trim() ?? "";
+        user.Gender = user.Gender?.Trim() ?? "";
+        user.About = user.About?.Trim() ?? "";
+
+        // Проверяем обязательные поля
+        if (string.IsNullOrWhiteSpace(user.Name))
+        {
+            errorMessage = "Введи имя.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(user.Email))
+        {
+            errorMessage = "Введи Email.";
+            return;
+        }
+
+        if (!new EmailAddressAttribute().IsValid(user.Email))
+        {
+            errorMessage = "Введи правильный Email.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(password) ||
+            password.Length < 8)
+        {
+            errorMessage = "Пароль должен содержать минимум 8 символов.";
+            return;
+        }
+
+        if (user.Age < 18)
+        {
+            errorMessage = "Возраст должен быть не менее 18 лет.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(user.Gender))
+        {
+            errorMessage = "Выбери пол.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(user.City))
+        {
+            errorMessage = "Укажи город.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(user.About))
+        {
+            errorMessage = "Расскажи немного о себе.";
+            return;
+        }
+
+        // Проверяем Email
+        bool emailExists = await Db.Users
+            .AnyAsync(u => u.Email == user.Email);
+
+        if (emailExists)
+        {
+            errorMessage = "Такой Email уже зарегистрирован.";
+            return;
+        }
+
+        try
+        {
+            // Заполняем обязательные поля базы данных
+            user.Description = user.About;
+
+            // Создаём хеш пароля
+            var hasher = new PasswordHasher<User>();
+
+            user.PasswordHash = hasher.HashPassword(
+                user,
+                password
+            );
+
+            user.CreatedAt = DateTime.UtcNow;
+
+            // Сохраняем пользователя
+            Db.Users.Add(user);
+
+            await Db.SaveChangesAsync();
+
+            // Переходим к анкетам
+            Navigation.NavigateTo("/profiles");
+        }
+        catch (DbUpdateException ex)
+        {
+            errorMessage = "Ошибка базы данных: " +
+                (ex.InnerException?.Message ?? ex.Message);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Ошибка регистрации: " + ex.Message;
+        }
+    }
+}
